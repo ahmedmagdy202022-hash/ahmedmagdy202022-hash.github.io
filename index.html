@@ -640,6 +640,8 @@ function sync(){
     unsubTx&&unsubTx();unsubTx=null;S.txPid=S.viewPid;S.tx=[];S.txLoaded=!S.viewPid;
     if(S.viewPid){const pid=S.viewPid;unsubTx=db.collection("tx").where("pid","==",pid).onSnapshot(q=>{if(S.txPid!==pid)return;S.tx=q.docs.map(d=>Object.assign({id:d.id},d.data()));S.txLoaded=true;render()},onFatal)}
   }
+  // a brand-new household has no periods, so there are no transactions to wait for
+  if(!S.viewPid)S.txLoaded=true;
   render();
 }
 
