@@ -537,8 +537,10 @@ function renderAuth(mode){
       <button class="btn block" type="submit" id="aBtn">${mode==="login"?"دخول":"اعمل الحساب"}</button>
     </form>
     <button class="link" type="button" id="aSwitch" style="margin-top:10px">${mode==="login"?"معنديش حساب، اعمل حساب جديد":"عندي حساب، ادخل"}</button>
+    <div id="aOAuth" style="display:grid;gap:10px" hidden></div>
   </section>`;
   $("#aSwitch").onclick=()=>renderAuth(mode==="login"?"signup":"login");
+  renderOAuth();
   $("#authForm").onsubmit=async e=>{
     e.preventDefault();const email=$("#aEmail").value.trim(),pass=$("#aPass").value;const err=$("#aErr"),btn=$("#aBtn");
     err.hidden=true;if(!email||pass.length<6){err.textContent=!email?"اكتب الإيميل.":"الباسورد لازم يبقى 6 حروف أو أرقام على الأقل.";err.hidden=false;return}
@@ -550,27 +552,43 @@ function renderAuth(mode){
     }catch(x){err.textContent=authErr(x);err.hidden=false;btn.disabled=false;btn.textContent=mode==="login"?"دخول":"اعمل الحساب"}
   };
 }
+// Google / Apple buttons appear only for providers switched on in Supabase → Authentication → Providers
+async function renderOAuth(){
+  let ext={};
+  try{const r=await fetch(SUPA_URL+"/auth/v1/settings",{headers:{apikey:SUPA_KEY}});if(r.ok)ext=(await r.json()).external||{}}catch(e){return}
+  const box=$("#aOAuth");if(!box)return;
+  const ps=[["google","ادخل بحساب Google"],["apple","ادخل بحساب Apple"]].filter(([p])=>ext[p]);
+  if(!ps.length)return;
+  box.innerHTML=`<div class="or"><span>أو</span></div>`+ps.map(([p,t])=>`<button class="btn ghost block" type="button" data-oauth="${p}">${t}</button>`).join("");
+  box.hidden=false;
+  box.querySelectorAll("[data-oauth]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;b.textContent="لحظة…";
+    const r=await sb.auth.signInWithOAuth({provider:b.dataset.oauth,options:{redirectTo:location.origin+location.pathname}});
+    if(r.error){const err=$("#aErr");err.textContent=authErr(r.error);err.hidden=false;b.disabled=false;b.textContent=ps.find(([p])=>p===b.dataset.oauth)[1]}
+  });
+}
 function renderJoin(user){
   setPhase("join");
   $("#view").innerHTML=`<section class="card auth">
     <h2>ادخل على دفتر البيت</h2>
-    <p class="hint">لو حد عمل الدفتر قبل كده، اكتب الكود اللي معاه. الكود بيظهر في الإعدادات عند أي حد جوه الدفتر.</p>
-    <form id="jForm" class="stack" novalidate>
-      <label class="field"><span>كود الدفتر</span><input class="inp" id="jCode" autocomplete="off" autocapitalize="characters" dir="ltr" style="font-family:var(--mono);letter-spacing:.2em;text-align:center;font-size:20px" placeholder="XXXXXXXX"></label>
-      <div id="jErr" class="err-msg" role="alert" hidden></div>
-      <button class="btn block" type="submit" id="jBtn">ادخل الدفتر</button>
-    </form>
+    <p class="hint">ابدأ دفتر جديد ليك، أو لو حد عمل الدفتر قبل كده اكتب الكود اللي معاه تحت.</p>
+    <button class="btn block" type="button" id="jNew">اعمل دفتر جديد فاضي</button>
     <div class="or"><span>أو</span></div>
-    <button class="btn ghost block" type="button" id="jNew">اعمل دفتر جديد فاضي</button>
+    <form id="jForm" class="stack" novalidate>
+      <label class="field"><span>كود دفتر موجود</span><input class="inp" id="jCode" autocomplete="off" autocapitalize="characters" dir="ltr" style="font-family:var(--mono);letter-spacing:.2em;text-align:center;font-size:20px" placeholder="XXXXXXXX"></label>
+      <p class="hint" style="margin:0">الكود بيظهر في الإعدادات عند أي حد جوه الدفتر.</p>
+      <div id="jErr" class="err-msg" role="alert" hidden></div>
+      <button class="btn ghost block" type="submit" id="jBtn">ادخل الدفتر بالكود</button>
+    </form>
     <button class="link" type="button" id="jOut" style="margin-top:10px">خروج من الحساب (${esc(user.email||"")})</button>
   </section>`;
   const busy=(b,t)=>{$("#jBtn").disabled=b;$("#jNew").disabled=b;if(t)$("#jBtn").textContent=t};
   $("#jForm").onsubmit=async e=>{e.preventDefault();const code=$("#jCode").value.trim();if(!code)return;busy(true,"لحظة…");
     const r=await sb.rpc("join_household",{code});
-    if(r.error){$("#jErr").textContent=authErr(r.error);$("#jErr").hidden=false;busy(false,"ادخل الدفتر");return}
+    if(r.error){$("#jErr").textContent=authErr(r.error);$("#jErr").hidden=false;busy(false,"ادخل الدفتر بالكود");return}
     startStore(r.data,user)};
-  $("#jNew").onclick=async()=>{busy(true);const r=await sb.rpc("create_household",{hh_name:"دفتر البيت"});
-    if(r.error){$("#jErr").textContent=authErr(r.error);$("#jErr").hidden=false;busy(false);return}
+  $("#jNew").onclick=async()=>{busy(true);$("#jNew").textContent="لحظة…";const r=await sb.rpc("create_household",{hh_name:"دفتر البيت"});
+    if(r.error){$("#jErr").textContent=authErr(r.error);$("#jErr").hidden=false;busy(false);$("#jNew").textContent="اعمل دفتر جديد فاضي";return}
     startStore(r.data,user)};
   $("#jOut").onclick=()=>signOut();
 }
@@ -603,7 +621,8 @@ async function signOut(){
   if(S.user)try{localStorage.removeItem("daftar:hh:"+S.user.id)}catch(e){}
   db=null;S.user=null;closeSheet();
   await sb.auth.signOut().catch(()=>{});
-  renderAuth("login");
+  // reload so the old household's background sync (timers, listeners) can't leak into the next account
+  location.reload();
 }
 async function boot(){
   setPhase("loading");
