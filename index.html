@@ -589,7 +589,7 @@ function renderJoin(user){
     startStore(r.data,user)};
   $("#jNew").onclick=async()=>{busy(true);$("#jNew").textContent="لحظة…";const r=await sb.rpc("create_household",{hh_name:"دفتر البيت"});
     if(r.error){$("#jErr").textContent=authErr(r.error);$("#jErr").hidden=false;busy(false);$("#jNew").textContent="اعمل دفتر جديد فاضي";return}
-    startStore(r.data,user)};
+    S.autoPeriod=true;startStore(r.data,user)};
   $("#jOut").onclick=()=>signOut();
 }
 async function enterHousehold(user){
@@ -635,6 +635,8 @@ function onFatal(e){toast(errMsg(e),true)}
 
 function sync(){
   if(!S.cfgLoaded||!S.periodsLoaded)return;
+  // a household just created from the join screen gets its first period right away
+  if(S.autoPeriod&&S.cfg){S.autoPeriod=false;if(!S.periods.length){createPeriod({name:nextName(),openedAt:todayStr(),budgets:{},expectedIncome:0}).catch(()=>{});return}}
   if(!S.viewPid||!S.periods.find(p=>p.id===S.viewPid))S.viewPid=(openPeriod()||S.periods[S.periods.length-1]||{}).id||null;
   if(S.txPid!==S.viewPid){
     unsubTx&&unsubTx();unsubTx=null;S.txPid=S.viewPid;S.tx=[];S.txLoaded=!S.viewPid;
@@ -962,13 +964,19 @@ function openPeriodSheet(prev,prevCalc){
       const name=$("#pName",body).value.trim();if(!name){toast("اكتب اسم للفترة",true);return}
       e.target.disabled=true;
       const budgets={};$$("[data-bid]",body).forEach(i=>{const n=normNum(i.value);budgets[i.dataset.bid]=isFinite(n)&&n>0?n:null});
-      const seq=Math.max(0,...S.periods.map(p=>p.seq||0))+1;const id="P"+String(seq).padStart(3,"0");
-      const doc={name,status:"open",openedAt:$("#pDate",body).value||todayStr(),closedAt:null,seq,budgets,expectedIncome:normNum($("#pInc",body).value)||0};
-      try{await write("periods/"+id,()=>db.doc("periods/"+id).set(doc));
-        await saveCfg(c=>{c.currentPeriodId=id});
-        S.viewPid=id;closeSheet();setTab("home");sync();toast(`فترة «${name}» اتفتحت`)}catch(err){e.target.disabled=false}
+      try{await createPeriod({name,openedAt:$("#pDate",body).value||todayStr(),budgets,expectedIncome:normNum($("#pInc",body).value)||0});
+        closeSheet()}catch(err){e.target.disabled=false}
     };
   });
+}
+async function createPeriod({name,openedAt,budgets,expectedIncome}){
+  const seq=Math.max(0,...S.periods.map(p=>p.seq||0))+1;
+  // periods.id is a global primary key, so it must be unique across households (not just "P001")
+  const id=uid("P"+String(seq).padStart(3,"0")+"_");
+  const doc={name,status:"open",openedAt,closedAt:null,seq,budgets,expectedIncome};
+  await write("periods/"+id,()=>db.doc("periods/"+id).set(doc));
+  await saveCfg(c=>{c.currentPeriodId=id});
+  S.viewPid=id;setTab("home");sync();toast(`فترة «${name}» اتفتحت`);
 }
 
 /* ----- add / edit transaction ----- */
