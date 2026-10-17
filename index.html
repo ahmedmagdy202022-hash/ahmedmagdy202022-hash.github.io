@@ -245,6 +245,26 @@ h4{margin:6px 0 2px;font-size:14px;color:var(--ink-2)}
 .noapp nav.tabs,.noapp #periodBtn,.noapp #settingsBtn{display:none!important}
 .noapp #app,.noapp{padding-bottom:24px}
 .auth{max-width:440px;width:100%;margin:20px auto 0}
+.authmode header.top{display:none}
+.auth2{max-width:420px;width:100%;margin:0 auto;padding-top:calc(28px + env(safe-area-inset-top,0px))}
+.auth-hero{text-align:center;margin-bottom:20px}
+.auth-logo{width:72px;height:72px;border-radius:20px;box-shadow:var(--shadow);display:block;margin:0 auto}
+.auth-hero h1{font-family:var(--display);font-size:34px;line-height:1.2;margin:14px 0 2px;color:var(--accent)}
+.auth-hero p{margin:0;color:var(--muted)}
+.auth-pts{list-style:none;padding:0;margin:18px auto 0;display:grid;gap:8px;text-align:start;max-width:300px}
+.auth-pts li{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--ink-2)}
+.auth-pts li::before{content:"✓";flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:700}
+.auth-card{padding:16px 18px 20px}
+.auth-card .stack{display:grid;gap:12px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:12px;padding:4px;margin-bottom:16px}
+.seg button{border:0;background:none;padding:9px;border-radius:9px;font-weight:600;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+#aOAuth{display:grid;gap:10px}
+.oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:15px}
+.oauth-btn.apple{background:#000;color:#fff;border-color:#000}
+.oauth-btn:disabled{opacity:.6}
+.ok-msg{background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:9px 12px;font-size:14px;font-weight:500}
+.auth-foot{text-align:center;color:var(--muted);font-size:12.5px;margin:14px 0 0}
 .err-msg{background:var(--over-bg);color:var(--over);border-radius:10px;padding:9px 12px;font-size:14px;font-weight:500}
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:14px 0}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -513,9 +533,10 @@ const SUPA_URL="https://fxaabknwpcwitpcbcfbp.supabase.co";
 const SUPA_KEY="sb_publishable_KGCYKLCchlpKyCftT6oT9w_CxmYC4g5";
 const sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"daftar-auth"}});
 S.phase="loading";S.pending=0;S.user=null;S.hh=null;
-function setPhase(p){S.phase=p;$("#app").classList.toggle("noapp",p!=="app")}
+function setPhase(p){S.phase=p;$("#app").classList.toggle("noapp",p!=="app");$("#app").classList.toggle("authmode",p==="auth")}
 function authErr(e){const m=String(e&&e.message||e||"");
   if(/Invalid login credentials/i.test(m))return "الإيميل أو الباسورد مش صح.";
+  if(/Email not confirmed/i.test(m))return "لسه ما أكدتش الإيميل. افتح الإيميل اللي بعتناهولك ودوس على اللينك، وبعدين ادخل.";
   if(/already registered|already been registered/i.test(m))return "الإيميل ده عليه حساب قبل كده. ادخل من «عندي حساب».";
   if(/Password should be|at least 6/i.test(m))return "الباسورد لازم يبقى 6 حروف أو أرقام على الأقل.";
   if(/invalid_code/i.test(m))return "الكود ده مش صح. اتأكد منه وجرّب تاني.";
@@ -524,47 +545,72 @@ function authErr(e){const m=String(e&&e.message||e||"");
   if(!navigator.onLine||/fetch|network/i.test(m))return "مفيش نت. اتأكد من الاتصال وجرّب تاني.";
   return "حصلت مشكلة: "+m;}
 
-function renderAuth(mode){
-  setPhase("auth");mode=mode||"login";
+function renderAuth(mode,note,email0){
+  setPhase("auth");mode=mode||"login";const login=mode==="login";
   $("#bannerSlot").innerHTML=installBanner();bindInstall();
-  $("#view").innerHTML=`<section class="card auth">
-    <h2>${mode==="login"?"أهلاً بيك تاني":"حساب جديد"}</h2>
-    <p class="hint">${mode==="login"?"ادخل بالإيميل والباسورد بتوعك.":"اعمل حساب بإيميلك. مريم تعمل حساب لوحدها وتدخل على نفس الدفتر بالكود."}</p>
-    <form id="authForm" class="stack" novalidate>
-      <label class="field"><span>الإيميل</span><input class="inp" id="aEmail" type="email" autocomplete="email" inputmode="email" dir="ltr" required></label>
-      <label class="field"><span>الباسورد</span><input class="inp" id="aPass" type="password" autocomplete="${mode==="login"?"current-password":"new-password"}" dir="ltr" required minlength="6"></label>
-      <div id="aErr" class="err-msg" role="alert" hidden></div>
-      <button class="btn block" type="submit" id="aBtn">${mode==="login"?"دخول":"اعمل الحساب"}</button>
-    </form>
-    <button class="link" type="button" id="aSwitch" style="margin-top:10px">${mode==="login"?"معنديش حساب، اعمل حساب جديد":"عندي حساب، ادخل"}</button>
-    <div id="aOAuth" style="display:grid;gap:10px" hidden></div>
+  $("#view").innerHTML=`<section class="auth2">
+    <div class="auth-hero">
+      <img src="icon.svg" class="auth-logo" alt="" width="72" height="72">
+      <h1>دفتر البيت</h1>
+      <p>مصروف ودخل البيت في مكان واحد</p>
+      <ul class="auth-pts">
+        <li>سجّل أي مصروف في ثواني</li>
+        <li>بادجيت لكل بند، وينبّهك لو عدّيته</li>
+        <li>دفتر واحد للبيت كله، كل واحد من موبايله</li>
+      </ul>
+    </div>
+    <div class="card auth-card">
+      <div class="seg" role="tablist">
+        <button type="button" role="tab" data-m="login" aria-selected="${login}">دخول</button>
+        <button type="button" role="tab" data-m="signup" aria-selected="${!login}">حساب جديد</button>
+      </div>
+      <div id="aOAuth" hidden></div>
+      <form id="authForm" class="stack" novalidate>
+        <label class="field"><span>الإيميل</span><input class="inp" id="aEmail" type="email" autocomplete="email" inputmode="email" dir="ltr" required></label>
+        <label class="field"><span>الباسورد${login?"":" (6 حروف أو أرقام على الأقل)"}</span><input class="inp" id="aPass" type="password" autocomplete="${login?"current-password":"new-password"}" dir="ltr" required minlength="6"></label>
+        <div id="aErr" class="err-msg" role="alert" hidden></div>
+        <div id="aOk" class="ok-msg" role="status" ${note?"":"hidden"}>${note?esc(note):""}</div>
+        <button class="btn block" type="submit" id="aBtn">${login?"دخول":"اعمل الحساب"}</button>
+      </form>
+    </div>
+    <p class="auth-foot">بيانات دفترك ما يشوفهاش غير الناس اللي جوه الدفتر.</p>
   </section>`;
-  $("#aSwitch").onclick=()=>renderAuth(mode==="login"?"signup":"login");
+  $$(".seg [data-m]").forEach(b=>b.onclick=()=>{if(b.dataset.m!==mode)renderAuth(b.dataset.m)});
+  if(email0)$("#aEmail").value=email0;
   renderOAuth();
   $("#authForm").onsubmit=async e=>{
-    e.preventDefault();const email=$("#aEmail").value.trim(),pass=$("#aPass").value;const err=$("#aErr"),btn=$("#aBtn");
-    err.hidden=true;if(!email||pass.length<6){err.textContent=!email?"اكتب الإيميل.":"الباسورد لازم يبقى 6 حروف أو أرقام على الأقل.";err.hidden=false;return}
+    e.preventDefault();const email=$("#aEmail").value.trim(),pass=$("#aPass").value;const err=$("#aErr"),ok=$("#aOk"),btn=$("#aBtn");
+    err.hidden=true;ok.hidden=true;if(!email||pass.length<6){err.textContent=!email?"اكتب الإيميل.":"الباسورد لازم يبقى 6 حروف أو أرقام على الأقل.";err.hidden=false;return}
     btn.disabled=true;btn.textContent="لحظة…";
     try{
-      if(mode==="signup"){const r=await sb.auth.signUp({email,password:pass});if(r.error)throw r.error}
+      if(!login){
+        const r=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});if(r.error)throw r.error;
+        // with "Confirm email" on, Supabase returns no session until the link in the email is clicked
+        if(!r.data.session){renderAuth("login",`بعتنالك إيميل على ${email}. افتحه ودوس على اللينك اللي فيه، وبعدين ادخل من هنا.`,email);return}
+        await enterHousehold(r.data.user);return;
+      }
       const r=await sb.auth.signInWithPassword({email,password:pass});if(r.error)throw r.error;
       await enterHousehold(r.data.user);
-    }catch(x){err.textContent=authErr(x);err.hidden=false;btn.disabled=false;btn.textContent=mode==="login"?"دخول":"اعمل الحساب"}
+    }catch(x){err.textContent=authErr(x);err.hidden=false;btn.disabled=false;btn.textContent=login?"دخول":"اعمل الحساب"}
   };
 }
 // Google / Apple buttons appear only for providers switched on in Supabase → Authentication → Providers
+let oauthProviders=null;
+const OAUTH={
+  google:{t:"كمّل بحساب Google",ic:`<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" style="width:20px;height:20px"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`},
+  apple:{t:"كمّل بحساب Apple",ic:`<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="width:20px;height:20px" fill="currentColor"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.5-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.4z"/></svg>`}
+};
 async function renderOAuth(){
-  let ext={};
-  try{const r=await fetch(SUPA_URL+"/auth/v1/settings",{headers:{apikey:SUPA_KEY}});if(r.ok)ext=(await r.json()).external||{}}catch(e){return}
-  const box=$("#aOAuth");if(!box)return;
-  const ps=[["google","ادخل بحساب Google"],["apple","ادخل بحساب Apple"]].filter(([p])=>ext[p]);
-  if(!ps.length)return;
-  box.innerHTML=`<div class="or"><span>أو</span></div>`+ps.map(([p,t])=>`<button class="btn ghost block" type="button" data-oauth="${p}">${t}</button>`).join("");
+  if(!oauthProviders){
+    try{const r=await fetch(SUPA_URL+"/auth/v1/settings",{headers:{apikey:SUPA_KEY}});if(!r.ok)return;const ext=(await r.json()).external||{};oauthProviders=Object.keys(OAUTH).filter(p=>ext[p])}catch(e){return}
+  }
+  const box=$("#aOAuth");if(!box||!oauthProviders.length)return;
+  box.innerHTML=oauthProviders.map(p=>`<button class="oauth-btn ${p}" type="button" data-oauth="${p}">${OAUTH[p].ic}<span>${OAUTH[p].t}</span></button>`).join("")+`<div class="or"><span>أو بالإيميل</span></div>`;
   box.hidden=false;
   box.querySelectorAll("[data-oauth]").forEach(b=>b.onclick=async()=>{
-    b.disabled=true;b.textContent="لحظة…";
-    const r=await sb.auth.signInWithOAuth({provider:b.dataset.oauth,options:{redirectTo:location.origin+location.pathname}});
-    if(r.error){const err=$("#aErr");err.textContent=authErr(r.error);err.hidden=false;b.disabled=false;b.textContent=ps.find(([p])=>p===b.dataset.oauth)[1]}
+    const p=b.dataset.oauth;b.disabled=true;b.querySelector("span").textContent="لحظة…";
+    const r=await sb.auth.signInWithOAuth({provider:p,options:{redirectTo:location.origin+location.pathname}});
+    if(r.error){const err=$("#aErr");err.textContent=authErr(r.error);err.hidden=false;b.disabled=false;b.querySelector("span").textContent=OAUTH[p].t}
   });
 }
 function renderJoin(user){
