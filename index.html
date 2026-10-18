@@ -116,13 +116,24 @@ button{cursor:pointer}
 [dir="rtl"] .fillbar{border-radius:4px 0 0 4px}
 .fillbar.hatch{background:repeating-linear-gradient(135deg,var(--budget) 0 2px,transparent 2px 7px);box-shadow:inset 0 0 0 1.5px var(--budget)}
 .track .val{font-size:13px;white-space:nowrap}
+.hb-list{display:grid;gap:14px}
+.hb-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.hb-lab{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink-2)}
+.hb-lab .sw{width:10px;height:10px;border-radius:3px;flex:none}
+.hb-lab .sw.hatch{background:repeating-linear-gradient(135deg,var(--budget) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--budget)}
+.hb-val{font-size:15px}
+.hb-track{height:12px;border-radius:6px;background:var(--sunk);overflow:hidden}
+.hb-fill{height:100%;border-radius:6px;min-width:4px}
+.hb-fill.hatch{background:repeating-linear-gradient(135deg,var(--budget) 0 2px,transparent 2px 6px);box-shadow:inset 0 0 0 1.5px var(--budget)}
+.chart-wrap .lbl.big{font-size:14px;font-weight:700}
+.chart-wrap .lbl{paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
 .diffline{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
 .srcs{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:13px;color:var(--ink-2)}
 
 /* svg chart */
 .chart-wrap{position:relative}
 .chart-wrap svg{display:block;width:100%;height:auto;overflow:visible}
-.chart-wrap text{font-family:var(--font);font-size:11px;fill:var(--muted)}
+.chart-wrap text{font-family:var(--font);font-size:12px;fill:var(--muted)}
 .chart-wrap .lbl{font-size:12px;font-weight:600}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2);margin:0 0 10px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -758,10 +769,11 @@ function renderHome(v){
   </section>
 
   <section class="card">
-    <div class="sec-head"><h2>المصروف تراكمي خلال الفترة</h2></div>
-    <p class="hint">الخط بيوريك وصلت لفين من الدخل والبادجيت، يوم بيوم. عدّي عليه عشان تشوف أي يوم.</p>
-    <div class="legend"><span><span class="ln" style="border-color:var(--expense)"></span>المصروف لحد اليوم</span><span><span class="ln dash" style="border-color:var(--income)"></span>الدخل</span><span><span class="ln dot" style="border-color:var(--budget)"></span>البادجيت</span></div>
+    <div class="sec-head"><h2>المصروف خلال الفترة</h2></div>
+    <p class="hint">صرفت لحد النهارده قد إيه، قدام الدخل والبادجيت. دوس على الرسمة عشان تشوف أي يوم.</p>
+    <div class="legend"><span><span class="ln" style="border-color:var(--expense)"></span>المصروف لحد النهارده</span>${cumData(p,c).proj?`<span><span class="ln dash" style="border-color:var(--expense);opacity:.6"></span>لو كمّلت بنفس المعدل</span>`:""}<span><span class="ln dash" style="border-color:var(--income)"></span>الدخل</span><span><span class="ln dot" style="border-color:var(--budget)"></span>البادجيت</span></div>
     <div class="chart-wrap" id="cumChart"></div>
+    ${cumNote(p,c)}
   </section>
 
   <section class="card">
@@ -781,50 +793,77 @@ function renderHome(v){
 }
 function compareBars(items){
   const max=Math.max(1,...items.map(i=>i.v));
-  return `<div class="hbars">${items.map(i=>`<div class="hbar"><span class="lab">${esc(i.l)}</span><div class="track"><div class="fillbar ${i.hatch?"hatch":""}" style="width:calc((100% - 104px) * ${(i.v/max).toFixed(4)});${i.col?`background:${i.col}`:""}" data-tip="<b>${esc(i.l)}</b><br>${fmt(i.v)} ج.م"></div><span class="val">${money(i.v)}</span></div></div>`).join("")}</div>`;
+  return `<div class="hb-list">${items.map(i=>`<div class="hb" data-tip="<b>${esc(i.l)}</b><br>${fmt(i.v)} ج.م">
+    <div class="hb-top"><span class="hb-lab"><span class="sw ${i.hatch?"hatch":""}" style="${i.col?`background:${i.col}`:""}"></span>${esc(i.l)}</span><span class="hb-val">${money(i.v)}</span></div>
+    <div class="hb-track"><div class="hb-fill ${i.hatch?"hatch":""}" style="width:${(i.v/max*100).toFixed(2)}%;${i.col?`background:${i.col}`:""}"></div></div></div>`).join("")}</div>`;
 }
 function niceStep(max,n){const raw=max/n,mag=Math.pow(10,Math.floor(Math.log10(raw))),r=raw/mag;return (r<=1?1:r<=2?2:r<=2.5?2.5:r<=5?5:10)*mag}
-function drawCum(el,p,c){
-  if(!el)return;
-  const W=Math.max(300,el.clientWidth||600),H=W<480?230:260,m={t:18,r:64,b:28,l:48};
+const kfmt=v=>v>=1000?(v/1000).toLocaleString("en-US",{maximumFractionDigits:1})+"k":String(v);
+// typical period length in days: average of closed periods, else a month
+function periodLen(){const ls=S.periods.filter(p=>p.status==="closed"&&p.openedAt&&p.closedAt).map(p=>dayDiff(p.openedAt,p.closedAt)+1).filter(d=>d>=7&&d<=62);
+  return ls.length?Math.round(ls.reduce((a,b)=>a+b,0)/ls.length):30}
+function cumData(p,c){
   const start=[p.openedAt,...c.exp.map(t=>t.date)].sort()[0];
   const endCand=[p.status==="closed"&&p.closedAt?p.closedAt:todayStr(),...c.exp.map(t=>t.date)].sort();
-  const end=endCand[endCand.length-1];
-  const n=Math.max(1,dayDiff(start,end)+1);
+  const n=Math.max(1,dayDiff(start,endCand[endCand.length-1])+1);
   const byDay=new Array(n).fill(0);c.exp.forEach(t=>{const i=dayDiff(start,t.date);if(i>=0&&i<n)byDay[i]+=+t.amount||0});
   const cum=[];byDay.reduce((a,v,i)=>(cum[i]=a+v),0);
-  const top=Math.max(cum[n-1]||0,c.income,c.budget,1);
-  const step=niceStep(top*1.08,4),ymax=Math.ceil(top*1.08/step)*step;
+  const last=cum[n-1]||0;
+  // straight-line projection to the end of a typical period, only once there are a few days of data
+  const D=p.status==="open"?Math.max(n,periodLen()):n;
+  const proj=p.status==="open"&&n>=3&&last>0&&D>n?Math.round(last/n*D):null;
+  return {start,n,byDay,cum,last,D,proj};
+}
+function drawCum(el,p,c){
+  if(!el)return;
+  const d=cumData(p,c),{start,n,byDay,cum,last,D,proj}=d;
+  const W=Math.max(300,el.clientWidth||600),H=W<480?240:280,m={t:16,r:12,b:30,l:40};
+  const top=Math.max(last,c.income,c.budget,proj||0,1);
+  const step=niceStep(top*1.04,4),ymax=Math.ceil(top*1.04/step)*step;
   const iw=W-m.l-m.r,ih=H-m.t-m.b;
-  const x=i=>m.l+(n===1?iw/2:i*iw/(n-1)),y=v=>m.t+ih-(v/ymax)*ih;
+  const x=i=>m.l+(D<=1?iw/2:i*iw/(D-1)),y=v=>m.t+ih-(v/ymax)*ih;
   let g="";
-  for(let v=0;v<=ymax+1e-6;v+=step){g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line-2)" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${v>=1000?(v/1000).toLocaleString("en-US")+"k":v}</text>`}
-  const ticks=Math.min(n,W<480?4:6);
-  for(let k=0;k<ticks;k++){const i=ticks===1?0:Math.round(k*(n-1)/(ticks-1));const d=new Date(parseD(start).getTime()+i*864e5);g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${d.getDate()}/${d.getMonth()+1}</text>`}
-  const pts=cum.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const area=`M${x(0)},${y(0)} L${pts.replace(/ /g," L")} L${x(n-1)},${y(0)} Z`;
-  // reference lines with labels at the start (left) of the plot, nudged apart
-  const refs=[{v:c.income,t:"الدخل",col:"var(--income)",dash:"6 4",w:2},{v:c.budget,t:"البادجيت",col:"var(--budget)",dash:"1 4",w:2.5}].filter(r=>r.v>0);
-  refs.sort((a,b)=>y(a.v)-y(b.v)).forEach((r,i)=>{r.ly=y(r.v)-6;if(i>0&&r.ly-refs[i-1].ly<15)r.ly=y(r.v)+15});
-  const refsSvg=refs.map(r=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(r.v)}" y2="${y(r.v)}" stroke="${r.col}" stroke-width="${r.w}" stroke-dasharray="${r.dash}" stroke-linecap="round"/><text class="lbl" x="${m.l+6}" y="${r.ly}" text-anchor="start" style="fill:var(--ink-2)">${r.t}: ${fmt(r.v)}</text>`).join("");
-  const lastV=cum[n-1]||0;
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="المصروف التراكمي ${fmt(lastV)} جنيه مقابل دخل ${fmt(c.income)} وبادجيت ${fmt(c.budget)}" direction="ltr">
+  for(let v=0;v<=ymax+1e-6;v+=step)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line-2)" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${kfmt(v)}</text>`;
+  const ticks=Math.min(D,W<480?4:6);
+  for(let k=0;k<ticks;k++){const i=ticks===1?0:Math.round(k*(D-1)/(ticks-1));const dt=new Date(parseD(start).getTime()+i*864e5);
+    g+=`<text x="${x(i)}" y="${H-9}" text-anchor="${k===0?"start":k===ticks-1?"end":"middle"}">${dt.getDate()}/${dt.getMonth()+1}</text>`}
+  const pts=cum.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const area=`M${x(0)},${y(0)} L${pts.join(" L")} L${x(n-1)},${y(0)} Z`;
+  // reference lines, labelled at the start of the plot (the spend line is still low there)
+  const refs=[{v:c.income,t:"الدخل",col:"var(--income)",dash:"7 5"},{v:c.budget,t:"البادجيت",col:"var(--budget)",dash:"2 5"}].filter(r=>r.v>0);
+  refs.sort((a,b)=>y(a.v)-y(b.v)).forEach((r,i)=>{r.ly=y(r.v)-7;if(i>0&&r.ly-refs[i-1].ly<16)r.ly=y(r.v)+17});
+  const refsSvg=refs.map(r=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(r.v)}" y2="${y(r.v)}" stroke="${r.col}" stroke-width="2" stroke-dasharray="${r.dash}" stroke-linecap="round"/><text class="lbl" x="${m.l+6}" y="${r.ly}" text-anchor="start" style="fill:var(--ink-2)">${r.t} ${fmt(r.v)}</text>`).join("");
+  const tx=x(n-1),ty=y(last);
+  const projSvg=proj?`<line x1="${tx}" y1="${ty}" x2="${x(D-1)}" y2="${y(proj)}" stroke="var(--expense)" stroke-width="2" stroke-dasharray="5 5" stroke-linecap="round" opacity=".55"/>
+    <circle cx="${x(D-1)}" cy="${y(proj)}" r="4" fill="var(--surface)" stroke="var(--expense)" stroke-width="2"/>
+    <text class="lbl" x="${x(D-1)}" y="${y(proj)-10}" text-anchor="end" style="fill:var(--ink-2)">≈ ${fmt(proj)}</text>`:"";
+  // today's value sits above its dot; flip below when it would hit the top
+  const ly=ty-12<m.t+10?ty+20:ty-12, la=tx>W-60?"end":tx<m.l+40?"start":"middle";
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="المصروف لحد النهارده ${fmt(last)} جنيه من دخل ${fmt(c.income)} وبادجيت ${fmt(c.budget)}${proj?`، ولو كمّلت بنفس المعدل هيوصل حوالي ${fmt(proj)}`:""}" direction="ltr">
+    <defs><linearGradient id="cumFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--expense)" stop-opacity=".22"/><stop offset="1" stop-color="var(--expense)" stop-opacity=".02"/></linearGradient></defs>
     ${g}
-    <path d="${area}" fill="var(--expense)" fill-opacity=".10"/>
-    ${refsSvg}
-    <polyline points="${pts}" fill="none" stroke="var(--expense)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="${x(n-1)}" cy="${y(lastV)}" r="4.5" fill="var(--expense)" stroke="var(--surface)" stroke-width="2"/>
-    <text class="lbl" x="${x(n-1)+8}" y="${y(lastV)+4}" style="fill:var(--ink)">${fmt(lastV)}</text>
+    <path d="${area}" fill="url(#cumFill)"/>
+    ${refsSvg}${projSvg}
+    <polyline points="${pts.join(" ")}" fill="none" stroke="var(--expense)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${tx}" cy="${ty}" r="5" fill="var(--expense)" stroke="var(--surface)" stroke-width="2"/>
+    <text class="lbl big" x="${tx}" y="${ly}" text-anchor="${la}" style="fill:var(--ink)">${fmt(last)}</text>
     <g id="hov" visibility="hidden"><line id="hvl" y1="${m.t}" y2="${m.t+ih}" stroke="var(--muted)" stroke-width="1"/><circle id="hvc" r="5" fill="var(--expense)" stroke="var(--surface)" stroke-width="2"/></g>
     <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="hit" style="touch-action:pan-y"/>
   </svg>`;
   const svg=$("svg",el),hit=$("#hit",el),hov=$("#hov",el);
-  const move=e=>{const r=svg.getBoundingClientRect();const px=(e.clientX-r.left)*(W/r.width);let i=n===1?0:Math.round((px-m.l)/(iw/(n-1)));i=Math.max(0,Math.min(n-1,i));
+  const move=e=>{const r=svg.getBoundingClientRect();const px=(e.clientX-r.left)*(W/r.width);let i=D<=1?0:Math.round((px-m.l)/(iw/(D-1)));i=Math.max(0,Math.min(n-1,i));
     hov.setAttribute("visibility","visible");$("#hvl",el).setAttribute("x1",x(i));$("#hvl",el).setAttribute("x2",x(i));$("#hvc",el).setAttribute("cx",x(i));$("#hvc",el).setAttribute("cy",y(cum[i]));
-    const d=dstr(new Date(parseD(start).getTime()+i*864e5));
-    showTip(`<b>${fmtDateLong(d)}</b><br>صرفت اليوم ده: ${fmt(byDay[i])} ج.م<br>الإجمالي لحد اليوم: ${fmt(cum[i])} ج.م`,r.left+x(i)*(r.width/W),r.top+y(cum[i])*(r.height/H))};
+    const ds=dstr(new Date(parseD(start).getTime()+i*864e5));
+    showTip(`<b>${fmtDateLong(ds)}</b><br>صرفت اليوم ده: ${fmt(byDay[i])} ج.م<br>الإجمالي لحد اليوم: ${fmt(cum[i])} ج.م`,r.left+x(i)*(r.width/W),r.top+y(cum[i])*(r.height/H))};
   hit.addEventListener("pointermove",move);hit.addEventListener("pointerdown",move);
   hit.addEventListener("pointerleave",()=>{hov.setAttribute("visibility","hidden");hideTip()});
+}
+// one plain-language line under the chart about where the period is heading
+function cumNote(p,c){
+  const {proj}=cumData(p,c);if(!proj)return "";
+  if(c.budget>0&&proj>c.budget)return `<div class="diffline">${pill("warn","انتبه")}<span>لو كمّلت بنفس المعدل هتصرف حوالي ${money(proj)}، يعني هتعدّي البادجيت بـ ${money(proj-c.budget)}</span></div>`;
+  if(c.budget>0)return `<div class="diffline">${pill("ok","ماشي كويس")}<span>لو كمّلت بنفس المعدل هتصرف حوالي ${money(proj)}، جوه البادجيت بـ ${money(c.budget-proj)}</span></div>`;
+  return `<div class="diffline">${pill("new","توقع")}<span>لو كمّلت بنفس المعدل هتصرف حوالي ${money(proj)} في الفترة</span></div>`;
 }
 
 function txRow(t,bal){
